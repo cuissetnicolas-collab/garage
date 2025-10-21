@@ -52,9 +52,7 @@ if uploaded_file:
             continue  # ligne incomplète
 
         code_journal = parts[2].strip().upper()
-        
-        # ⚠️ Ne prendre que les lignes VE
-        if code_journal != "VE":
+        if code_journal != "VE":  # ⚠️ Filtrer uniquement ventes
             continue
 
         date_raw = parts[1].strip()
@@ -97,18 +95,16 @@ if uploaded_file:
         libelle_final = f"Facture {num_facture} - {nom_client}"
 
         # Sens
-        debit = montant if sens == "D" else 0.0
-        credit = montant if sens == "C" else 0.0
+        debit = round(montant if sens == "D" else 0.0, 2)
+        credit = round(montant if sens == "C" else 0.0, 2)
 
         ecritures.append({
             "Date": date_str,
             "Journal": journal,
             "Numéro de compte": compte,
             "Libellé": libelle_final,
-            "Montant au débit": debit,
-            "Montant au crédit": credit,
-            "Facture": num_facture,
-            "Client": nom_client
+            "Débit": debit,
+            "Crédit": credit
         })
 
     # Conversion en DataFrame
@@ -116,11 +112,11 @@ if uploaded_file:
 
     # ✅ Aperçu principal
     st.subheader("👀 Aperçu des écritures")
-    st.dataframe(df[["Date", "Journal", "Numéro de compte", "Libellé", "Montant au débit", "Montant au crédit"]], use_container_width=True)
+    st.dataframe(df, use_container_width=True)
 
-    # ✅ Contrôle d'équilibre
-    total_debit = df["Montant au débit"].sum()
-    total_credit = df["Montant au crédit"].sum()
+    # ✅ Contrôle d’équilibre
+    total_debit = round(df["Débit"].sum(), 2)
+    total_credit = round(df["Crédit"].sum(), 2)
     diff = round(total_debit - total_credit, 2)
 
     if abs(diff) < 0.01:
@@ -128,20 +124,10 @@ if uploaded_file:
     else:
         st.error(f"⚠️ Écart de {diff:.2f} € entre le débit et le crédit")
 
-    # ✅ Aperçu groupé par facture/client
-    st.subheader("📊 Totaux par facture et client")
-    df_group = df.groupby(["Facture", "Client"], as_index=False).agg({
-        "Montant au débit": "sum",
-        "Montant au crédit": "sum"
-    })
-    df_group["Équilibre"] = df_group["Montant au débit"] - df_group["Montant au crédit"]
-    st.dataframe(df_group, use_container_width=True)
-
-    # ✅ Export Excel avec deux onglets
+    # ✅ Export Excel
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Ecritures")
-        df_group.to_excel(writer, index=False, sheet_name="Totaux")
     buffer.seek(0)
 
     st.download_button(
