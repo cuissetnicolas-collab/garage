@@ -11,7 +11,7 @@ if "login" not in st.session_state:
 def login(username, password):
     users = {
         "aurore": {"password": "12345", "name": "Aurore Demoulin"},
-        "laure.froidefond": {"password": "Laure2019$", "name": "Laure Froidefond"},
+        "laure.froidefond": {"password": "Laure Froidefond", "name": "Laure Froidefond"},
         "bruno": {"password": "Toto1963$", "name": "Toto El Gringo"},
     }
     if username in users and password == users[username]["password"]:
@@ -40,7 +40,6 @@ uploaded_file = st.file_uploader("📂 Importer le fichier TXT des ventes", type
 
 if uploaded_file:
     journal = st.text_input("📒 Journal", value="VT")
-    date_ecriture = st.date_input("📅 Date d'écriture")
 
     # Lecture du fichier TXT
     lines = uploaded_file.read().decode("utf-8").splitlines()
@@ -62,13 +61,15 @@ if uploaded_file:
         # Conversion date JJMMYY → JJ/MM/20YY
         date_str = f"{date_raw[:2]}/{date_raw[2:4]}/20{date_raw[4:6]}"
 
-        # Extraction du nom client
+        # Extraction du nom client depuis le libellé
         nom_client = ""
         if "Fact:" in libelle_facture:
             try:
                 nom_client = libelle_facture.split("Fact:")[1].split(" ", 1)[1]
             except IndexError:
                 nom_client = "Client inconnu"
+        else:
+            nom_client = "Client inconnu"
 
         # 🔄 Normalisation des comptes standards
         compte_remap = {
@@ -77,11 +78,11 @@ if uploaded_file:
             "44571000": "445710090",
         }
 
-        # Si le compte figure dans le mapping → on l’utilise
+        # Détermination du compte comptable
         if code_compte in compte_remap:
             compte = compte_remap[code_compte]
         else:
-            # Sinon → c’est un compte client
+            # Compte client alphabétique
             code_alpha = ''.join(c for c in nom_client if c.isalpha()).upper()
             code_alpha = code_alpha[:1] if code_alpha else "X"
             compte = f"411{code_alpha}00000"
@@ -100,16 +101,18 @@ if uploaded_file:
             "Libellé": libelle_final,
             "Montant au débit": debit,
             "Montant au crédit": credit,
+            "Facture": num_facture,
+            "Client": nom_client
         })
 
     # Conversion en DataFrame
     df = pd.DataFrame(ecritures)
 
-    # ✅ Aperçu
+    # ✅ Aperçu principal
     st.subheader("👀 Aperçu des écritures")
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df[["Date", "Journal", "Numéro de compte", "Libellé", "Montant au débit", "Montant au crédit"]], use_container_width=True)
 
-    # ✅ Contrôle équilibre
+    # ✅ Contrôle d'équilibre
     total_debit = df["Montant au débit"].sum()
     total_credit = df["Montant au crédit"].sum()
     diff = round(total_debit - total_credit, 2)
@@ -119,14 +122,24 @@ if uploaded_file:
     else:
         st.error(f"⚠️ Écart de {diff:.2f} € entre le débit et le crédit")
 
+    # ✅ Aperçu groupé par facture/client
+    st.subheader("📊 Totaux par facture et client")
+    df_group = df.groupby(["Facture", "Client"], as_index=False).agg({
+        "Montant au débit": "sum",
+        "Montant au crédit": "sum"
+    })
+    df_group["Équilibre"] = df_group["Montant au débit"] - df_group["Montant au crédit"]
+    st.dataframe(df_group, use_container_width=True)
+
     # ✅ Export Excel
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Ecritures")
+        df_group.to_excel(writer, index=False, sheet_name="Totaux")
     buffer.seek(0)
 
     st.download_button(
-        label="📥 Télécharger le fichier Excel",
+        label="📥 Télécharger le fichier Excel PennyLane",
         data=buffer,
         file_name="Ecritures_PennyLane.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
