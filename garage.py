@@ -52,8 +52,7 @@ if uploaded_file:
         if len(parts) < 11:
             continue  # ligne incomplète
 
-        # Extraction des champs
-        date_raw = parts[1]
+        date_raw = parts[1].strip()
         code_compte = parts[3].strip()
         libelle_facture = parts[5].replace('"', '').strip()
         num_facture = parts[6].replace('"', '').strip()
@@ -63,7 +62,7 @@ if uploaded_file:
         # Conversion date JJMMYY → JJ/MM/20YY
         date_str = f"{date_raw[:2]}/{date_raw[2:4]}/20{date_raw[4:6]}"
 
-        # Extraction du nom client à partir du libellé
+        # Extraction du nom client
         nom_client = ""
         if "Fact:" in libelle_facture:
             try:
@@ -71,18 +70,26 @@ if uploaded_file:
             except IndexError:
                 nom_client = "Client inconnu"
 
-        # Génération du compte client 411 + initiales
-        code_alpha = ''.join(c for c in nom_client if c.isalpha()).upper()
-        code_alpha = code_alpha[:1] if code_alpha else "X"
-        compte_client = f"411{code_alpha}00000"
+        # 🔄 Normalisation des comptes standards
+        compte_remap = {
+            "70600000": "706000000",
+            "70700000": "707000000",
+            "44571000": "445710090",
+        }
 
-        # Détermination du compte utilisé
-        compte = compte_client if code_compte.startswith("0113") else code_compte
+        # Si le compte figure dans le mapping → on l’utilise
+        if code_compte in compte_remap:
+            compte = compte_remap[code_compte]
+        else:
+            # Sinon → c’est un compte client
+            code_alpha = ''.join(c for c in nom_client if c.isalpha()).upper()
+            code_alpha = code_alpha[:1] if code_alpha else "X"
+            compte = f"411{code_alpha}00000"
 
-        # Libellé final
+        # Libellé clair
         libelle_final = f"Facture {num_facture} - {nom_client}"
 
-        # Sens débit / crédit
+        # Sens
         debit = montant if sens == "D" else 0.0
         credit = montant if sens == "C" else 0.0
 
@@ -98,11 +105,7 @@ if uploaded_file:
     # Conversion en DataFrame
     df = pd.DataFrame(ecritures)
 
-    # ✅ Contrôle du nombre de lignes par facture
-    nb_lignes = len(df)
-    st.info(f"{nb_lignes} lignes d’écritures générées.")
-
-    # ✅ Aperçu des écritures
+    # ✅ Aperçu
     st.subheader("👀 Aperçu des écritures")
     st.dataframe(df, use_container_width=True)
 
