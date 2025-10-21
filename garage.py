@@ -11,7 +11,7 @@ if "login" not in st.session_state:
 def login(username, password):
     users = {
         "aurore": {"password": "12345", "name": "Aurore Demoulin"},
-        "laure.froidefond": {"password": "Laure Froidefond", "name": "Laure Froidefond"},
+        "laure.froidefond": {"password": "Laure2019$", "name": "Laure Froidefond"},
         "bruno": {"password": "Toto1963$", "name": "Toto El Gringo"},
     }
     if username in users and password == users[username]["password"]:
@@ -50,6 +50,12 @@ if uploaded_file:
     for parts in data:
         if len(parts) < 11:
             continue  # ligne incomplète
+
+        code_journal = parts[2].strip().upper()
+        
+        # ⚠️ Ne prendre que les lignes VE
+        if code_journal != "VE":
+            continue
 
         date_raw = parts[1].strip()
         code_compte = parts[3].strip()
@@ -131,7 +137,7 @@ if uploaded_file:
     df_group["Équilibre"] = df_group["Montant au débit"] - df_group["Montant au crédit"]
     st.dataframe(df_group, use_container_width=True)
 
-    # ✅ Export Excel
+    # ✅ Export Excel avec deux onglets
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Ecritures")
